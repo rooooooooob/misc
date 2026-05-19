@@ -63,6 +63,22 @@ public:
         board[3][2] = STATE::EMPTY;
     }
 
+    Board(STATE state[N][N])
+        : left(0) {
+        for (int y = 0; y < N; ++y) {
+            for (int x = 0; x < N; ++x) {
+                if (inBounds(x, y)) {
+                    board[x][y] = state[x][y];
+                    if (state[x][y] == STATE::FULL) {
+                        ++this->left;
+                    }
+                } else {
+                    board[x][y] = STATE::FULL;
+                }
+            }
+        }
+    }
+
     void printBoard() const {
         std::cout << "    ";
         for (int x = 0; x < N; ++x) {
@@ -125,8 +141,7 @@ public:
     template <typename F, bool findFirstOnly>
     bool backtrack(const F& onSuccess) {
         if (left == 1) {
-            onSuccess();
-            return true;
+            return onSuccess();
         }
         for (int y = 0; y < N; ++y) {
             for (int x = 0; x < N; ++x) {
@@ -168,25 +183,64 @@ private:
     DIR trackDir[31];
 };
 
-
-int main() {
+void countSolutions() {
     Board board;
 
     int solutions = 0;
     int centerSolutions = 0;
     
-    const auto recordAllSolutions = [&board, &solutions, &centerSolutions]() {
+    const auto recordAllSolutions = [&board, &solutions, &centerSolutions]() -> bool {
         ++solutions;
         if (board.getState(3, 3) == STATE::FULL) {
             ++centerSolutions;
-            std::cout << "printing solution:" << std::endl;
-            board.printMoves();
-            exit(0);
         }
+        return false;
     };
     board.backtrack<decltype(recordAllSolutions), false>(recordAllSolutions);
     
     std::cout << "final solutions: " << solutions << " | " << centerSolutions << std::endl;
+}
+
+int main(int argc, char *argv[]) {
+    if (argc > 1) {
+        const std::string raw = argv[1];
+        if (raw.size() != 33) {
+            std::cerr << "Invalid input board to solve for. Expected len 33, found: " << raw.size() << std::endl;
+            return 1;
+        }
+        STATE state[N][N];
+        int y = 0;
+        int prog = 0;
+        for (const char c : raw) {
+            const bool middle = y > 1 && y < 5;
+            const int offset = middle ? 0 : 2;
+            const int len = middle ? 7 : 3;
+            const int x = offset + prog;
+            if (c != '0' && c != '1') {
+                std::cerr << "Invalid board pos [" << x << "][" << y << "]: " << c << std::endl;
+                return 2;
+            }
+            state[x][y] = c == '1' ? STATE::FULL : STATE::EMPTY;
+            if (++prog >= len) {
+                ++y;
+                prog = 0;
+            }
+        }
+        Board board(state);
+        board.printBoard();
+        bool foundNonCenterSolution = false;
+        const auto abortOnCenter = [&foundNonCenterSolution, &board](){
+            foundNonCenterSolution = true;
+            if (board.getState(3, 3) == STATE::FULL) {
+                return true;
+            }
+            return false;
+        };
+        const bool foundCenterSolution = board.backtrack<decltype(abortOnCenter), true>(abortOnCenter);
+        std::cout << (foundCenterSolution ? "Solved" : (foundNonCenterSolution ? "Non-Center" : "Impossible")) << std::endl;
+    } else {
+        countSolutions();
+    }
 
     return 0;
 }
