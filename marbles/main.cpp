@@ -1,18 +1,23 @@
+#include <cassert>
 #include <iostream>
 #include <utility>
-#include <vector>
 
-enum STATE {
+typedef std::pair<int, int> Coord;
+
+static const int N = 7;
+
+enum class STATE {
     EMPTY = 0,
     FULL
 };
 
-enum DIR {
+enum class DIR {
     LEFT = 0,
     UP,
     RIGHT,
     DOWN
 };
+
 
 char dirToStr(DIR dir) {
     switch (dir) {
@@ -28,49 +33,10 @@ char dirToStr(DIR dir) {
     return '?';
 }
 
-typedef std::pair<int, int> Coord;
-
-static const int N = 7;
-
-STATE board[N][N];
-int left = 32;
-Coord trackFrom[31];
-DIR trackDir[31];
-
-void assert(bool cond, const char *text) {
-    if (!cond) {
-        std::cerr << "assert failed: " << text << std::endl;
-        exit(1);
-    }
-}
-
 constexpr bool inBounds(int x, int y) {
     const bool xoob = x < 2 || x > 4;
     const bool yoob = y < 2 || y > 4;
     return (x >= 0 && x < N && y >= 0 && y < N) && (!xoob || !yoob);
-}
-
-void printBoard() {
-    std::cout << "    ";
-    for (int x = 0; x < N; ++x) {
-        std::cout << " " << x << " ";
-    }
-    std::cout << "\n    ";
-    for (int x = 0; x < N; ++x) {
-        std::cout << "---";
-    }
-    std::cout << std::endl;
-    for (int y = 0; y < N; ++y) {
-        std::cout << " " << y << " |";
-        for (int x = 0; x < N; ++x) {
-            if (inBounds(x, y)) {
-                std::cout << '[' << (board[x][y] == STATE::FULL ? 'O' : ' ') << ']';
-            } else {
-                std::cout << "   ";
-            }
-        }
-        std::cout << std::endl;
-    }
 }
 
 constexpr std::pair<int, int> newCoord(Coord from, DIR dir, int len) {
@@ -82,88 +48,145 @@ constexpr std::pair<int, int> newCoord(Coord from, DIR dir, int len) {
     return ret;
 }
 
-constexpr bool canMove(Coord from, DIR dir) {
-    const Coord middle = newCoord(from, dir, 1);
-    const Coord to = newCoord(from, dir, 2);
-
-    return inBounds(to.first, to.second) && board[middle.first][middle.second] == STATE::FULL && board[to.first][to.second] == STATE::EMPTY;
-}
-
-Coord move(Coord from, DIR dir) {
-    const Coord middle = newCoord(from, dir, 1);
-    const Coord to = newCoord(from, dir, 2);
-
-    if (board[from.first][from.second] != STATE::FULL) {
-        std::cout << "uh oh: " << from.first << ", " << from.second << std::endl;
-        printBoard();
-    }
-    assert(board[from.first][from.second] == STATE::FULL, "move() - valid move start pos");
-    assert(canMove(from, dir), "move() - can move");
-
-    board[from.first][from.second] = STATE::EMPTY;
-    board[middle.first][middle.second] = STATE::EMPTY;
-    board[to.first][to.second] = STATE::FULL;
-
-    trackFrom[31 - left] = from;
-    trackDir[31 - left] = dir;
-
-    --left;
-
-    return to;
-}
-
-int solutions = 0;
-int centerSolutions = 0;
-
-void backtrack() {
-    if (left == 1) {
-        // std::cout << "found solution: " << std::endl;
-        // printBoard();
-        solutions++;
-        if (board[3][3] == STATE::FULL) {
-            ++centerSolutions;
-            std::cout << "printing solution:" << std::endl;
-            for (int i = 0; i < 31; ++i) {
-                std::cout << "(" << trackFrom[i].first << ", " << trackFrom[i].second << ")  " << dirToStr(trackDir[i]) << std::endl;
+class Board {
+public:
+    Board()
+        : left(31) {
+        for (int y = 0; y < N; ++y) {
+            for (int x = 0; x < N; ++x) {
+                board[x][y] = STATE::FULL;
             }
-            exit(0);
         }
-        return;
+        // to avoid duplicating for symmetry + only 1 Coordsible move
+        // just make it to start with
+        board[3][1] = STATE::EMPTY;
+        board[3][2] = STATE::EMPTY;
     }
-    for (int y = 0; y < N; ++y) {
+
+    void printBoard() const {
+        std::cout << "    ";
         for (int x = 0; x < N; ++x) {
-            const Coord from(x, y);
-            if (inBounds(x, y) && board[from.first][from.second] == STATE::FULL) {
-                for (int i = 0; i < 4; ++i) {
-                    const DIR dir = static_cast<DIR>(i);
-                    if (canMove(from, dir)) {
-                        const Coord to = move(from, dir);
-                        //std::cout << "(" << from.first << ", " << from.second << ") " << dirToStr(dir) << " (" << to.first << ", " << to.second << ")\n";
-                        backtrack();
-                        // undo move
-                        const Coord middle = newCoord(from, dir, 1);
-                        board[from.first][from.second] = STATE::FULL;
-                        board[middle.first][middle.second] = STATE::FULL;
-                        board[to.first][to.second] = STATE::EMPTY;
-                        ++left;
+            std::cout << " " << x << " ";
+        }
+        std::cout << "\n    ";
+        for (int x = 0; x < N; ++x) {
+            std::cout << "---";
+        }
+        std::cout << std::endl;
+        for (int y = 0; y < N; ++y) {
+            std::cout << " " << y << " |";
+            for (int x = 0; x < N; ++x) {
+                if (inBounds(x, y)) {
+                    std::cout << '[' << (board[x][y] == STATE::FULL ? 'O' : ' ') << ']';
+                } else {
+                    std::cout << "   ";
+                }
+            }
+            std::cout << std::endl;
+        }
+    }
+
+    void printMoves() const {
+        for (int i = 0; i < 31; ++i) {
+            std::cout << "(" << trackFrom[i].first << ", " << trackFrom[i].second << ")  " << dirToStr(trackDir[i]) << std::endl;
+        }
+    }
+
+    bool canMove(Coord from, DIR dir) {
+        const Coord middle = newCoord(from, dir, 1);
+        const Coord to = newCoord(from, dir, 2);
+
+        return inBounds(to.first, to.second) && board[middle.first][middle.second] == STATE::FULL && board[to.first][to.second] == STATE::EMPTY;
+    }
+
+    Coord move(Coord from, DIR dir) {
+        const Coord middle = newCoord(from, dir, 1);
+        const Coord to = newCoord(from, dir, 2);
+
+        if (board[from.first][from.second] != STATE::FULL) {
+            std::cout << "uh oh: " << from.first << ", " << from.second << std::endl;
+            printBoard();
+        }
+        assert((board[from.first][from.second] == STATE::FULL) && "move() - valid move start pos");
+        assert(canMove(from, dir) && "move() - can move");
+
+        board[from.first][from.second] = STATE::EMPTY;
+        board[middle.first][middle.second] = STATE::EMPTY;
+        board[to.first][to.second] = STATE::FULL;
+
+        trackFrom[31 - left] = from;
+        trackDir[31 - left] = dir;
+
+        --left;
+
+        return to;
+    }
+
+    template <typename F, bool findFirstOnly>
+    bool backtrack(const F& onSuccess) {
+        if (left == 1) {
+            onSuccess();
+            return true;
+        }
+        for (int y = 0; y < N; ++y) {
+            for (int x = 0; x < N; ++x) {
+                const Coord from(x, y);
+                if (inBounds(x, y) && this->board[from.first][from.second] == STATE::FULL) {
+                    for (int i = 0; i < 4; ++i) {
+                        const DIR dir = static_cast<DIR>(i);
+                        if (canMove(from, dir)) {
+                            const Coord to = move(from, dir);
+                            //std::cout << "(" << from.first << ", " << from.second << ") " << dirToStr(dir) << " (" << to.first << ", " << to.second << ")\n";
+                            const bool ret = backtrack<F, findFirstOnly>(onSuccess);
+                            if (findFirstOnly) {
+                                if (ret) {
+                                    return true;
+                                }
+                            }
+                            // undo move
+                            const Coord middle = newCoord(from, dir, 1);
+                            this->board[from.first][from.second] = STATE::FULL;
+                            this->board[middle.first][middle.second] = STATE::FULL;
+                            this->board[to.first][to.second] = STATE::EMPTY;
+                            ++left;
+                        }
                     }
                 }
             }
         }
+        return false;
     }
-}
+
+    STATE getState(int x, int y) const {
+        return this->board[x][y];
+    }
+
+private:
+    STATE board[N][N];
+    int left;
+    Coord trackFrom[31];
+    DIR trackDir[31];
+};
+
 
 int main() {
-    for (int y = 0; y < N; ++y) {
-        for (int x = 0; x < N; ++x) {
-            board[x][y] = STATE::FULL;
+    Board board;
+
+    int solutions = 0;
+    int centerSolutions = 0;
+    
+    const auto recordAllSolutions = [&board, &solutions, &centerSolutions]() {
+        ++solutions;
+        if (board.getState(3, 3) == STATE::FULL) {
+            ++centerSolutions;
+            std::cout << "printing solution:" << std::endl;
+            board.printMoves();
+            exit(0);
         }
-    }
-    // to avoid duplicating for symmetry + only 1 Coordsible move
-    // just make it to start with
-    board[3][1] = STATE::EMPTY;
-    board[3][2] = STATE::EMPTY;
-    left = 31;
-    backtrack();
+    };
+    board.backtrack<decltype(recordAllSolutions), false>(recordAllSolutions);
+    
     std::cout << "final solutions: " << solutions << " | " << centerSolutions << std::endl;
+
+    return 0;
 }
